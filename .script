@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+
+import csv
+import tempfile
+import subprocess
+import sys
+
+def extract (mdb_file, table, out):
+    """Extract the dict reader from the csv"""
+    args = ["mdb-export", mdb_file, table]
+    result = subprocess.run(args, stdout=out)
+    result.check_returncode()
+    # Go to the start of the file
+    out.seek(0)
+    return csv.DictReader(out)
+
+def extract_list (mdb_file, table):
+    """Extract a table from the mdb database."""
+    with tempfile.TemporaryFile("+w") as tmp:
+        table = extract(mdb_file, table, tmp)
+        return [row for row in table]
+
+def extract_dict (mdb_file, table, key):
+    """Extract a table from the mdb database."""
+    with tempfile.TemporaryFile("+w") as tmp:
+        table = extract(mdb_file, table, tmp)
+        return {row[key]: row for row in table}
+
+def print_header ():
+    """Print the CSV header"""
+    print('Titulo,Subtitulo,Autor,Editorial,"Año publicacion","Lugar publicacion",ISBN,Idioma')
+
+def generate (authors, elements, editorials, languages):
+    """Generate CSV database."""
+    # FIXME: Use DictWriter
+    print_header()
+    for k, v in elements.items():
+        line = '"' + v['Titulo'] + '",'
+        line = line + '"' + v['Subtitulo'] + '",'
+        try:
+            id_author = v['IdAutor']
+            author_row = authors[id_author]
+            author = author_row['a']
+        except KeyError:
+            author = "Unknown"
+        line = line + '"' + author + '",'
+
+        try:
+            id_editorial = v['IdEditorial']
+            editorial_row = editorials[id_editorial]
+            editor = editorial_row['a']
+        except KeyError:
+            editor = "Unknown"
+        line = line + '"' + editor + '",'
+        line = line + '"' + v['AnoEdicion'] + '",'
+        line = line + '"' + v['LugarEdicion'] + '",'
+        line = line + '"' + v['ISBN'] + '",'
+        try:
+            id_language = v['IdLenguaInfo']
+            language_row = languages[id_language]
+            language = language_row['Lengua']
+        except KeyError:
+            language = "Unknown"
+        line = line + '"' + language + '"'
+        print(line)
+
+def show_help ():
+    """Show the help"""
+    print("This must be executed with only one parameter: the abies mdb")
+
+def main (mdb_file):
+    """Entry point."""
+    if mdb_file == "--help":
+        show_help()
+        exit(0)
+
+    # Extract the data
+    authors = extract_dict(mdb_file, "Autores", "IdAutor")
+    elements = extract_dict(mdb_file, "Fondos", "IdFondo")
+    editorials = extract_dict(mdb_file, "Editoriales", "IdEditorial")
+    languages = extract_dict(mdb_file, "Lenguas", "IdLengua")
+    # Print the final format
+    generate(authors, elements, editorials, languages)
+
+if __name__ == "__main__":
+    if len(sys.argv) == 2:
+        main(sys.argv[1])
+    else:
+        print("Incorrect number of arguments!")
+        exit(1)
